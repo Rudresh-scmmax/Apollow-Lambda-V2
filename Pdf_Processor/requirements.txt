@@ -1,0 +1,5 @@
+boto3
+PyMuPDF==1.24.9
+Pillow
+psycopg2-binary
+# google-generativeai

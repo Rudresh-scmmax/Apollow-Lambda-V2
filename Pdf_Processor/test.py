@@ -1,0 +1,89 @@
+import boto3
+import time
+from PIL import Image
+from io import BytesIO
+
+# ==== CONFIG ====
+REGION = "us-east-1"
+MODEL_ID = "arn:aws:bedrock:us-east-1:127214171089:inference-profile/us.meta.llama3-2-11b-instruct-v1:0"
+
+bedrock = boto3.client("bedrock-runtime", region_name=REGION)
+
+def query_bedrock_with_image(image_path, max_retries=3, retry_delay=5):
+    """
+    Extract text from an image using Bedrock's Llama 3.2 vision model via Converse API.
+    Uses the same approach as the Node.js implementation.
+    """
+    import time
+    
+    for attempt in range(1, max_retries + 1):
+        try:
+            # Read image as bytes
+            with open(image_path, 'rb') as f:
+                image_bytes = f.read()
+            
+            # Determine image format from file extension
+            image_format = "png" if image_path.lower().endswith('.png') else "jpeg"
+            
+            # Build the prompt (matching Node.js version)
+            prompt = "Transcribe all text from this image in **markdown** format. Capture every visible word, including small print, headers, footnotes, and tables."
+            
+            # Construct messages for Converse API
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"text": prompt},
+                        {
+                            "image": {
+                                "format": image_format,
+                                "source": {"bytes": image_bytes}
+                            }
+                        }
+                    ]
+                }
+            ]
+            
+            # Call Converse API
+            response = bedrock.converse(
+                modelId=MODEL_ID,
+                messages=messages,
+                inferenceConfig={
+                    "maxTokens": 2048,
+                    "temperature": 0,
+                    "topP": 0.1
+                }
+            )
+            
+            # Extract text from response
+            text = ""
+            if response.get('output') and response['output'].get('message'):
+                content = response['output']['message'].get('content', [])
+                if content and len(content) > 0:
+                    text = content[0].get('text', '')
+            
+            print(f"Extracted {len(text)} characters from image")
+            return text
+            
+        except Exception as e:
+            error_name = type(e).__name__
+            print(f"Bedrock image error (attempt {attempt}/{max_retries}): {e}")
+            
+            # Retry on throttling or service unavailable errors
+            if error_name in ['ThrottlingException', 'ServiceUnavailableException'] and attempt < max_retries:
+                print(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+            elif attempt == max_retries:
+                print("Error extracting text from image after multiple attempts.")
+                return ""
+            else:
+                # For other errors, don't retry
+                return ""
+    
+    return ""
+
+text = query_bedrock_with_image("page_0_part0.png")
+
+# Print the first few lines
+print("\n--- Extracted Text ---\n")
+print(text)
