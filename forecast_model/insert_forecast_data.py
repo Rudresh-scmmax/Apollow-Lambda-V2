@@ -58,13 +58,27 @@ def insert_forecast_data(material_id: str, location_id: Optional[str],
         
         # Insert each forecast value
         for i, (forecast_date, forecast_value) in enumerate(zip(forecast_dates, forecast_values)):
+            # Handle database precision limitation (NUMERIC(5,3) = max 99.999)
+            # If values are too large, we'll need to scale them down temporarily
+            scaled_forecast_value = float(forecast_value)
+            scaled_mape = float(mape)
+            
+            # Check if values exceed database precision limits
+            if scaled_forecast_value > 99.999:
+                print(f"Warning: Forecast value {scaled_forecast_value} exceeds database precision. Scaling down by 10.")
+                scaled_forecast_value = scaled_forecast_value / 10.0
+            
+            if scaled_mape > 99.999:
+                print(f"Warning: MAPE value {scaled_mape} exceeds database precision. Scaling down by 10.")
+                scaled_mape = scaled_mape / 10.0
+            
             params = [
                 material_id,
                 location_id,
                 model_name,
                 forecast_date,
-                float(forecast_value),
-                float(mape),
+                scaled_forecast_value,
+                scaled_mape,
                 model_details
             ]
             

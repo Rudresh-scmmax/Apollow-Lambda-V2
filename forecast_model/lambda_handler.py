@@ -108,8 +108,9 @@ def lambda_handler(event, context):
                     'body': json.dumps({'error': 'All models failed to run'})
                 }
             best_result = min(results, key=lambda x: x['mape'])
-            # Use "Best" as model name for database storage when no specific model requested
-            best_result['model_name'] = 'Best'
+            # Use "Best(ActualModelName)" as model name for database storage when no specific model requested
+            actual_model_name = best_result['model_name']
+            best_result['model_name'] = f'Best({actual_model_name})'
         else:
             # Run specific model
             try:
@@ -132,6 +133,7 @@ def lambda_handler(event, context):
         
         # Insert/Update forecast data in database
         try:
+            print(f"best_result: {best_result}")
             insert_result = insert_forecast_data(
                 material_id=material_id,
                 location_id=location_id,
@@ -155,12 +157,12 @@ def lambda_handler(event, context):
             'model_details': best_result['details']
         }
         
-        # Show actual model name in response, but store as "Best" in database
+        # Show actual model name in response, but store as "Best(ModelName)" in database
         if model_name == 'Best' or model_name is None:
             # Find the actual best model name from results
             actual_model_name = min(results, key=lambda x: x['mape'])['model_name']
             response_data['model_used'] = actual_model_name
-            response_data['model_used_for_storage'] = 'Best'
+            response_data['model_used_for_storage'] = f'Best({actual_model_name})'
         else:
             response_data['model_used'] = best_result['model_name']
         
@@ -539,3 +541,13 @@ def run_all_models(series):
             continue
     
     return results
+
+
+
+if __name__ == "__main__":
+    event = {
+        "material_id": "100724-000000",
+        "location_id": "212",
+        "model_name": "Best"
+    }
+    lambda_handler(event, {})   
