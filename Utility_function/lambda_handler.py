@@ -3,6 +3,7 @@ import os
 # import cyclical_pattern
 # import correlation_value
 import porters_analysis
+import forecast_recommendation
 # import negotiation_obj
 # import demand_supply_summary
 
@@ -13,7 +14,7 @@ def lambda_handler(event, context):
 
     Expected event structure:
     {
-        "action": "cyclical_pattern" or "correlation" or "porters_analysis" or "negotiation_avoids" or "demand_supply_summary",
+        "action": "cyclical_pattern" or "correlation" or "porters_analysis" or "negotiation_avoids" or "demand_supply_summary" or "forecast_recommendation",
         "material_id": "M036",
         "region": "China - Qingdao"
     }
@@ -30,6 +31,12 @@ def lambda_handler(event, context):
         "material_id": "M036",
         "region": "Asia-Pacific",
         "force_refresh": false  # Optional: force regeneration even if data exists
+    }
+    or
+    {
+        "action": "forecast_recommendation",
+        "material_id": "M036",
+        "location_id": 1
     }
     """
 
@@ -155,7 +162,55 @@ def lambda_handler(event, context):
                     "Access-Control-Allow-Origin": "*"
                 },
                 "body": json.dumps({"error": f"Error generating porter's analysis: {str(e)}"})
-            } 
+            }
+
+    elif action == "forecast_recommendation":
+        # Forecast recommendation request
+        try:
+            material_id = body.get("material_id")
+            location_id = body.get("location_id")
+            
+            if not material_id or not location_id:
+                return {
+                    "statusCode": 400,
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    },
+                    "body": json.dumps({"error": "Missing 'material_id' or 'location_id' parameter in the request"})
+                }
+            
+            forecast_event = {
+                "material_id": material_id,
+                "location_id": location_id
+            }
+            
+            result = forecast_recommendation.lambda_handler(forecast_event, context)
+            
+            # Check if result is already a proper response dict
+            if isinstance(result, dict) and "statusCode" in result:
+                return result
+            
+            # Otherwise wrap it
+            return {
+                "statusCode": 200,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*"
+                },
+                "body": json.dumps(result) if isinstance(result, dict) else result
+            }
+            
+        except Exception as e:
+            print(f"Error generating forecast recommendation: {str(e)}")
+            return {
+                "statusCode": 500,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*"
+                },
+                "body": json.dumps({"error": f"Error generating forecast recommendation: {str(e)}"})
+            }
 
     # elif action == "negotiation_avoids":
     #     # Negotiation avoids analysis request
@@ -260,7 +315,8 @@ def lambda_handler(event, context):
                     "correlation",
                     "porters_analysis",
                     "negotiation_avoids",
-                    "demand_supply_summary"
+                    "demand_supply_summary",
+                    "forecast_recommendation"
                 ]
             })
         }

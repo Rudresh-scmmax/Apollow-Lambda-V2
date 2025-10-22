@@ -31,7 +31,7 @@ def lambda_handler(event, context):
     {
         "material_id": "string",
         "location_id": "string" (optional),
-        "model_name": "string" (optional, defaults to "best")
+        "model_name": "string" (optional, defaults to 'Best')
     }
     
     Available model names:
@@ -40,7 +40,7 @@ def lambda_handler(event, context):
     - "Random Forest"
     - "XGBoost"
     - "N-BEATS"
-    - "best" (or omit model_name) - returns model with lowest MAPE
+    - 'Best' (or omit model_name) - returns model with lowest MAPE
     
     Returns:
     {
@@ -59,7 +59,7 @@ def lambda_handler(event, context):
         # Parse input parameters
         material_id = event.get('material_id')
         location_id = event.get('location_id')
-        model_name = event.get('model_name', 'best')
+        model_name = event.get('model_name', 'Best')
         
         if not material_id:
             return {
@@ -68,7 +68,7 @@ def lambda_handler(event, context):
             }
         
         # Validate model name
-        valid_models = ['SARIMA', 'Linear Regression', 'Random Forest', 'XGBoost', 'N-BEATS', 'best']
+        valid_models = ['SARIMA', 'Linear Regression', 'Random Forest', 'XGBoost', 'N-BEATS', 'Best']
         if model_name not in valid_models:
             return {
                 'statusCode': 400,
@@ -99,7 +99,7 @@ def lambda_handler(event, context):
             }
         
         # Run forecasting based on model_name
-        if model_name == 'best' or model_name is None:
+        if model_name == 'Best' or model_name is None:
             # Try all models and return the one with best MAPE
             results = run_all_models(series)
             if not results:
@@ -156,7 +156,7 @@ def lambda_handler(event, context):
         }
         
         # Show actual model name in response, but store as "Best" in database
-        if model_name == 'best' or model_name is None:
+        if model_name == 'Best' or model_name is None:
             # Find the actual best model name from results
             actual_model_name = min(results, key=lambda x: x['mape'])['model_name']
             response_data['model_used'] = actual_model_name

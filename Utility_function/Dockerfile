@@ -2,8 +2,9 @@ FROM public.ecr.aws/lambda/python:3.11
 
 WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Update system packages
+# Install build dependencies for compiling Python packages
 RUN yum update -y && \
+    yum install -y gcc gcc-c++ make cmake python3-devel && \
     yum clean all
 
 # Upgrade pip and install wheel

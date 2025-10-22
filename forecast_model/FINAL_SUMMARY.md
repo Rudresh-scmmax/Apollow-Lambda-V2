@@ -49,7 +49,7 @@
 {
     "material_id": "100724-000000",
     "region": "US",
-    "model_name": "best"
+    "model_name": 'Best'
 }
 ```
 **Result**: Automatically selects best performing model
@@ -77,7 +77,7 @@
 - `"Random Forest"` - Random Forest with 400 estimators
 - `"XGBoost"` - XGBoost gradient boosting
 - `"N-BEATS"` - Neural Basis Expansion Analysis for Time Series
-- `"best"` or omit `model_name` - Automatically selects model with lowest MAPE
+- `'Best'` or omit `model_name` - Automatically selects model with lowest MAPE
 
 ## 🔄 **Automatic Best Model Selection**
 
