@@ -6,7 +6,7 @@ from datetime import datetime
 import boto3
 from db_query import database_query
 from extract_market_intelligence import capture_market_intelligence, DatabaseManager
-from llm_module import generate_takeaways, query_bedrock_with_image, news_agent
+from llm_module import generate_takeaways, query_bedrock_with_image, news_agent, classify_news_tags
 
 from PIL import Image
 import fitz  # PyMuPDF
@@ -193,7 +193,11 @@ def lambda_handler(event, context):
             db = DatabaseManager()
             inserted_count = 0
             for news_item in news_items:
-                if db.insert_news_item(news_item, material_id, user_id):
+                # Classify the news item to get the tag
+                news_tag = classify_news_tags(news_item)
+                print(f"[INFO] Classified news tag: {news_tag} for item: {news_item.get('title', 'Unknown')}")
+                
+                if db.insert_news_item(news_item, material_id, user_id, news_tag):
                     inserted_count += 1
                     print(f"[SUCCESS] Inserted news item: {news_item.get('title')}")
                 else:

@@ -1,0 +1,15 @@
+purchasing_org_id,buyer_name,material_id,plant_id,supplier_id,po_number,purchase_date,currency_of_po,uom,quantity,cost_per_uom,total_cost,payment_terms,freight_terms,transaction_posting_date
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2023-02-01,INR,Kilograms,59200,1409.0,83412800,60 Days Credit from Invoice Date,To Sellers A/c,2023-02-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2023-05-01,INR,Kilograms,59200,1375.0,81400000,60 Days Credit from Invoice Date,To Sellers A/c,2023-05-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2023-06-01,INR,Kilograms,59200,1205.0,71336000,60 Days Credit from Invoice Date,To Sellers A/c,2023-06-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2023-07-01,INR,Kilograms,59200,1250.0,74000000,60 Days Credit from Invoice Date,To Sellers A/c,2023-07-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2023-11-01,INR,Kilograms,59200,1006.0,59555200,60 Days Credit from Invoice Date,To Sellers A/c,2023-11-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2023-12-01,INR,Kilograms,59200,960.0,56832000,60 Days Credit from Invoice Date,To Sellers A/c,2023-12-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2024-02-01,INR,Kilograms,59200,1034.0,61212800,60 Days Credit from Invoice Date,To Sellers A/c,2024-02-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2024-03-01,INR,Kilograms,59200,1023.0,60561600,60 Days Credit from Invoice Date,To Sellers A/c,2024-03-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2024-04-01,INR,Kilograms,59200,1038.0,61449600,60 Days Credit from Invoice Date,To Sellers A/c,2024-04-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2024-05-01,INR,Kilograms,59200,1114.0,65948800,60 Days Credit from Invoice Date,To Sellers A/c,2024-05-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2024-06-01,INR,Kilograms,59200,1057.0,62574400,60 Days Credit from Invoice Date,To Sellers A/c,2024-06-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2024-07-01,INR,Kilograms,59200,1090.0,64528000,60 Days Credit from Invoice Date,To Sellers A/c,2024-07-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2024-09-01,INR,Kilograms,59200,1020.0,60384000,60 Days Credit from Invoice Date,To Sellers A/c,2024-09-01
+1,Sukumar Shetty,101834-000000,1,10006,21135661,2025-01-01,INR,Kilograms,59200,926.0,54819200,60 Days Credit from Invoice Date,To Sellers A/c,2025-01-01

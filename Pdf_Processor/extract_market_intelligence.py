@@ -2,7 +2,7 @@ from datetime import datetime, date, timezone
 import json
 from db_query import database_query
 # Assuming the updated extract_demand_supply_outlook_agent is now in llm_module
-from llm_module import extract_demand_supply_outlook_agent, news_agent 
+from llm_module import extract_demand_supply_outlook_agent, news_agent, classify_news_tags 
 
 class DatabaseManager:
     def get_material_id(self, material):
@@ -131,7 +131,7 @@ class DatabaseManager:
             return False
         
     
-    def insert_news_item(self, news_item, material_id, user_id):
+    def insert_news_item(self, news_item, material_id, user_id, news_tag=""):
         """Inserts a single news item into the news_insights table."""
         try:
             location_id = self.get_location_id(news_item["region"])
@@ -157,9 +157,9 @@ class DatabaseManager:
                 """
                 INSERT INTO news_insights (
                     published_date, source, source_link, title,
-                    material_id, location_id, upload_user_id
+                    material_id, location_id, upload_user_id, news_tag
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 [
                     published_date,
@@ -168,11 +168,12 @@ class DatabaseManager:
                     news_item["title"],
                     material_id,
                     location_id,
-                    user_id
+                    user_id,
+                    news_tag
                 ]
             )
 
-            print(f"[SUCCESS] Inserted news item for material_id={material_id}, location_id={location_id}")
+            print(f"[SUCCESS] Inserted news item for material_id={material_id}, location_id={location_id}, tag={news_tag}")
             return True
 
         except Exception as e:
@@ -226,7 +227,11 @@ def capture_market_intelligence(plain_text, report_url, user_id, material, mater
         news_insights = news_agent(plain_text, material, report_url)
         print(f"Extracted News Insights: {news_insights}")
         for news_item in news_insights:
-            if db.insert_news_item(news_item, material_id, user_id):
+            # Classify the news item to get the tag
+            news_tag = classify_news_tags(news_item)
+            print(f"[INFO] Classified news tag: {news_tag} for item: {news_item.get('title', 'Unknown')}")
+            
+            if db.insert_news_item(news_item, material_id, user_id, news_tag):
                 print(f"[SUCCESS] Inserted news item: {news_item}")
             else:
                 print(f"[WARNING] Failed to insert news item: {news_item}")

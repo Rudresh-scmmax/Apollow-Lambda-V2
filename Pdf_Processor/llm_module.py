@@ -234,61 +234,59 @@ def news_agent(extracted_text, material, report_url):
 
 def classify_news_tags(news_item):
     """
-    Classify a news item and extract tags/categories.
+    Classify a news item and extract the most relevant tag/category.
     
     Args:
         news_item: Dict containing news item with 'title' and optionally 'description'
     
     Returns:
-        List of tag dictionaries with 'tag_description' and 'synonyms'
+        String representing the most relevant tag/category, or empty string if none found
     """
     title = news_item.get('title', '')
     description = news_item.get('description', '')
     
-    system_msg = """You are a news classifier that extracts relevant tags and categories from news items.
+    system_msg = """You are a news classifier. Analyze the news and return ONLY the exact tag name from these categories:
 
-Analyze the news and extract relevant tags/categories. For each tag:
-- Provide a clear tag description (e.g., "Plant Closure", "Price Increase", "Supply Disruption", "Regulatory Change", "Force Majeure", "Market Expansion", etc.)
-- Provide synonyms or related terms for the tag (e.g., for "Plant Closure": ["shutdown", "outage", "maintenance", "breakdown"])
+Available categories:
+- "Plant Closure": Plant shutdowns, breakdowns, maintenance, outages
+- "Force Majeure": Natural disasters, strikes, uncontrollable events  
+- "Taxes": Tax changes, tariffs, duties, import/export taxes
+- "Rule Changes": Regulatory changes, new regulations, policy changes
 
-Only extract tags that are clearly relevant to the news content. Be specific and accurate.
+IMPORTANT: Return ONLY the tag name in quotes (e.g., "Plant Closure") or return "none" if no category matches.
 
-Return your response as a JSON list in this exact format:
-[
-  {
-    "tag_description": "Plant Closure",
-    "synonyms": ["shutdown", "outage", "maintenance", "breakdown"]
-  },
-  {
-    "tag_description": "Supply Disruption",
-    "synonyms": ["supply shortage", "supply constraint", "limited availability"]
-  }
-]
+Do NOT include any explanations, reasoning, or additional text. Just the tag name or "none"."""
 
-If no clear tags can be identified, return an empty list: []"""
-
-    user_content = f"Extract tags from this news item:\n\nTitle: {title}"
+    user_content = f"News title: {title}"
     if description:
         user_content += f"\nDescription: {description}"
     
     try:
-        tags = invoke_bedrock_text(system_msg.strip(), user_content.strip())
-        if not isinstance(tags, list):
-            return []
-        
-        # Validate and clean tags
-        cleaned_tags = []
-        for tag in tags:
-            if isinstance(tag, dict) and tag.get("tag_description"):
-                # Ensure synonyms is a list
-                if not isinstance(tag.get("synonyms"), list):
-                    tag["synonyms"] = []
-                cleaned_tags.append(tag)
-        
-        return cleaned_tags
+        result = invoke_bedrock_text(system_msg.strip(), user_content.strip())
+        if isinstance(result, str):
+            # Clean the result to extract just the tag name
+            result = result.strip()
+            
+            # Remove any explanatory text and extract just the tag
+            if result.startswith('"') and result.endswith('"'):
+                result = result[1:-1]  # Remove quotes
+            elif result.startswith("Therefore, the most relevant tag for this news item is: "):
+                # Handle the case where LLM returns explanatory text
+                result = result.replace("Therefore, the most relevant tag for this news item is: ", "").strip()
+                if result.startswith('"') and result.endswith('"'):
+                    result = result[1:-1]
+            
+            # Check if it's one of the valid categories
+            valid_tags = ["Plant Closure", "Force Majeure", "Taxes", "Rule Changes"]
+            if result in valid_tags:
+                return result
+            else:
+                return ""
+        else:
+            return ""
     except Exception as e:
         print(f"[ERROR] Failed to classify news tags: {e}")
-        return []
+        return ""
 
 
 def price_outlook_agent(extracted_text, material):
