@@ -2,7 +2,7 @@ from datetime import datetime, date, timezone
 import json
 from db_query import database_query
 # Assuming the updated extract_demand_supply_outlook_agent is now in llm_module
-from llm_module import extract_demand_supply_outlook_agent, news_agent, classify_news_tags 
+from llm_module import extract_demand_supply_outlook_agent, news_agent, classify_news_tags, summarize_demand_supply_with_bedrock 
 
 class DatabaseManager:
     def get_material_id(self, material):
@@ -180,6 +180,169 @@ class DatabaseManager:
             print(f"[ERROR] News insert failed for {news_item}: {e}")
             return False
 
+    def get_demand_supply_data(self, material_id, location_id, summary_date):
+        """
+        Retrieves all demand and supply impact data for a specific material, location, and date.
+        
+        Args:
+            material_id (str): Material ID
+            location_id (int): Location ID  
+            summary_date (str): Date in YYYY-MM-DD format
+            
+        Returns:
+            dict: Contains 'demand_data' and 'supply_data' lists
+        """
+        try:
+            # Get demand impact data
+            demand_query = """
+            SELECT demand_impact, source_published_date, source, source_link
+            FROM demand_supply_trends 
+            WHERE material_id = %s AND location_id = %s 
+            AND DATE(source_published_date) = %s 
+            AND demand_impact IS NOT NULL
+            ORDER BY source_published_date DESC
+            """
+            
+            demand_result = database_query(demand_query, [material_id, location_id, summary_date])
+            demand_data = json.loads(demand_result["body"]) if demand_result.get("body") else []
+            
+            # Get supply impact data
+            supply_query = """
+            SELECT supply_impact, source_published_date, source, source_link
+            FROM demand_supply_trends 
+            WHERE material_id = %s AND location_id = %s 
+            AND DATE(source_published_date) = %s 
+            AND supply_impact IS NOT NULL
+            ORDER BY source_published_date DESC
+            """
+            
+            supply_result = database_query(supply_query, [material_id, location_id, summary_date])
+            supply_data = json.loads(supply_result["body"]) if supply_result.get("body") else []
+            
+            return {
+                'demand_data': demand_data,
+                'supply_data': supply_data
+            }
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to retrieve demand/supply data: {e}")
+            return {'demand_data': [], 'supply_data': []}
+
+    def upsert_demand_supply_summary(self, material_id, location_id, summary_date, demand_summary, supply_summary, combined_summary, demand_count, supply_count):
+        """
+        Inserts or updates a summary record in demand_supply_summary table.
+        Uses PostgreSQL UPSERT (ON CONFLICT) for upsert functionality.
+        
+        Args:
+            material_id (str): Material ID
+            location_id (int): Location ID
+            summary_date (str): Date in YYYY-MM-DD format
+            demand_summary (str): Demand summary text
+            supply_summary (str): Supply summary text
+            combined_summary (str): Combined summary text
+            demand_count (int): Number of demand records
+            supply_count (int): Number of supply records
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # PostgreSQL UPSERT syntax
+            upsert_query = """
+            INSERT INTO demand_supply_summary (
+                material_id, location_id, summary_date, 
+                demand_summary, supply_summary, combined_summary,
+                demand_count, supply_count, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (material_id, location_id, summary_date) 
+            DO UPDATE SET
+                demand_summary = EXCLUDED.demand_summary,
+                supply_summary = EXCLUDED.supply_summary,
+                combined_summary = EXCLUDED.combined_summary,
+                demand_count = EXCLUDED.demand_count,
+                supply_count = EXCLUDED.supply_count,
+                updated_at = EXCLUDED.updated_at
+            """
+            
+            # Convert datetime to string for JSON serialization
+            current_time = datetime.now(timezone.utc).isoformat()
+            
+            database_query(upsert_query, [
+                material_id, location_id, summary_date,
+                demand_summary, supply_summary, combined_summary,
+                demand_count, supply_count, current_time, current_time
+            ])
+            
+            print(f"[SUCCESS] Upserted summary for material_id={material_id}, location_id={location_id}, date={summary_date}")
+            return True
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to upsert summary: {e}")
+            return False
+
+    def process_demand_supply_summary(self, material_id, location_id, summary_date):
+        """
+        Processes demand and supply data to create/update summary in demand_supply_summary table.
+        
+        Args:
+            material_id (str): Material ID
+            location_id (int): Location ID
+            summary_date (str): Date in YYYY-MM-DD format
+            
+        Returns:
+            dict: Result with success status and summary data
+        """
+        try:
+            # Step 1: Get demand and supply data
+            data = self.get_demand_supply_data(material_id, location_id, summary_date)
+            demand_data = data['demand_data']
+            supply_data = data['supply_data']
+            
+            # Step 2: Summarize with Bedrock
+            summaries = summarize_demand_supply_with_bedrock(
+                demand_data, supply_data, material_id, location_id, summary_date
+            )
+            
+            # Step 3: Upsert the summary
+            success = self.upsert_demand_supply_summary(
+                material_id=material_id,
+                location_id=location_id,
+                summary_date=summary_date,
+                demand_summary=summaries['demand_summary'],
+                supply_summary=summaries['supply_summary'],
+                combined_summary=summaries['combined_summary'],
+                demand_count=len(demand_data),
+                supply_count=len(supply_data)
+            )
+            
+            if success:
+                return {
+                    'success': True,
+                    'message': f'Summary processed successfully for material_id={material_id}, location_id={location_id}, date={summary_date}',
+                    'data': {
+                        'material_id': material_id,
+                        'location_id': location_id,
+                        'summary_date': summary_date,
+                        'demand_count': len(demand_data),
+                        'supply_count': len(supply_data),
+                        'summaries': summaries
+                    }
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': f'Failed to process summary for material_id={material_id}, location_id={location_id}, date={summary_date}',
+                    'data': None
+                }
+                
+        except Exception as e:
+            print(f"[ERROR] Failed to process summary: {e}")
+            return {
+                'success': False,
+                'message': f'Error processing summary: {str(e)}',
+                'data': None
+            }
+
 
 def capture_market_intelligence(plain_text, report_url, user_id, material, material_id):
     """
@@ -187,7 +350,6 @@ def capture_market_intelligence(plain_text, report_url, user_id, material, mater
     It extracts material and region, queries database for IDs,
     then uses LLM to get supply/demand outlooks, and finally inserts them into DB.
     """
-
 
     db = DatabaseManager()
 
@@ -224,6 +386,32 @@ def capture_market_intelligence(plain_text, report_url, user_id, material, mater
 
         print(f"Summary: Successfully inserted {inserted_supply_count} supply and {inserted_demand_count} demand outlooks.")
 
+        # Process demand/supply summary after inserting data
+        summary_results = []
+        if inserted_supply_count > 0 or inserted_demand_count > 0:
+            # Get unique location_ids and dates from the inserted data
+            processed_combinations = set()
+            
+            for outlook_item in supply_outlook_items + demand_outlook_items:
+                location_id = db.get_location_id(outlook_item["region"])
+                published_date = outlook_item.get("published_date")
+                
+                if location_id and published_date:
+                    combination_key = f"{material_id}_{location_id}_{published_date}"
+                    if combination_key not in processed_combinations:
+                        processed_combinations.add(combination_key)
+                        
+                        # Process summary for this combination
+                        summary_result = db.process_demand_supply_summary(
+                            material_id, location_id, published_date
+                        )
+                        summary_results.append(summary_result)
+                        
+                        if summary_result['success']:
+                            print(f"[SUCCESS] Created/updated summary for material_id={material_id}, location_id={location_id}, date={published_date}")
+                        else:
+                            print(f"[WARNING] Failed to create summary: {summary_result['message']}")
+
         news_insights = news_agent(plain_text, material, report_url)
         print(f"Extracted News Insights: {news_insights}")
         for news_item in news_insights:
@@ -243,7 +431,8 @@ def capture_market_intelligence(plain_text, report_url, user_id, material, mater
                 'material': material,
                 'material_id': material_id,
                 'extracted_supply_outlooks': supply_outlook_items,
-                'extracted_demand_outlooks': demand_outlook_items
+                'extracted_demand_outlooks': demand_outlook_items,
+                'summary_results': summary_results
             })
         }
 

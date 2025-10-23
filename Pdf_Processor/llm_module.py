@@ -413,3 +413,136 @@ def price_by_date_agent(extracted_text, material):
             price["region"] = region.split(",")[-1].strip()
     
     return price_list
+
+
+def summarize_demand_supply_with_bedrock(demand_data, supply_data, material_id, location_id, summary_date):
+    """
+    Uses AWS Bedrock to summarize demand and supply data.
+    
+    Args:
+        demand_data (list): List of demand impact records
+        supply_data (list): List of supply impact records
+        material_id (str): Material ID
+        location_id (int): Location ID
+        summary_date (str): Summary date
+        
+    Returns:
+        dict: Contains summarized text for demand, supply, and combined
+    """
+    try:
+        # Prepare data for summarization
+        demand_texts = [item.get('demand_impact', '') for item in demand_data if item.get('demand_impact')]
+        supply_texts = [item.get('supply_impact', '') for item in supply_data if item.get('supply_impact')]
+        
+        # Create context for Bedrock
+        context = f"""
+        Material ID: {material_id}
+        Location ID: {location_id}
+        Summary Date: {summary_date}
+        
+        DEMAND IMPACT DATA:
+        {chr(10).join([f"- {text}" for text in demand_texts]) if demand_texts else "No demand data available"}
+        
+        SUPPLY IMPACT DATA:
+        {chr(10).join([f"- {text}" for text in supply_texts]) if supply_texts else "No supply data available"}
+        """
+        
+        system_msg = """
+        You are an expert market analyst that creates concise summaries of demand and supply impact data.
+        
+        Your task is to:
+        1. Create a clear, concise demand summary (2-3 sentences max)
+        2. Create a clear, concise supply summary (2-3 sentences max)  
+        3. Create a combined summary that shows the overall market outlook (2-3 sentences max)
+        
+        Focus on:
+        - Key trends and patterns
+        - Market sentiment (positive/negative/neutral)
+        - Important factors affecting the market
+        - Overall outlook for the material and location
+        
+        Return your response in this EXACT JSON format:
+        {
+            "demand_summary": "Your demand summary here",
+            "supply_summary": "Your supply summary here", 
+            "combined_summary": "Your combined market outlook here"
+        }
+        
+        Keep summaries professional, factual, and actionable.
+        """
+        
+        result = invoke_bedrock_text(system_msg, context)
+        
+        if result and isinstance(result, dict):
+            return {
+                'demand_summary': result.get('demand_summary', 'No demand data available for summarization'),
+                'supply_summary': result.get('supply_summary', 'No supply data available for summarization'),
+                'combined_summary': result.get('combined_summary', 'Insufficient data for market outlook')
+            }
+        else:
+            # If invoke_bedrock_text returns None due to JSON parsing error, try manual parsing
+            try:
+                # Get the raw response and extract JSON manually
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"text": context.strip()}
+                        ]
+                    }
+                ]
+                
+                response = bedrock.converse(
+                    modelId=TEXT_MODEL_ARN,
+                    messages=messages,
+                    system=[{"text": system_msg.strip()}],
+                    inferenceConfig={
+                        "maxTokens": 4096,
+                        "temperature": 0.1,
+                        "topP": 0.9
+                    }
+                )
+                
+                # Extract text from response
+                text = ""
+                if response.get('output') and response['output'].get('message'):
+                    content = response['output']['message'].get('content', [])
+                    if content and len(content) > 0:
+                        text = content[0].get('text', '')
+                
+                # Clean up the response text
+                text = text.replace("```json", "").replace("```", "").strip()
+                
+                # Try to find JSON in the response
+                if "{" in text and "}" in text:
+                    # Find the JSON part
+                    start_idx = text.find("{")
+                    end_idx = text.rfind("}") + 1
+                    json_text = text[start_idx:end_idx]
+                    
+                    # Parse the JSON
+                    parsed_result = json.loads(json_text)
+                    
+                    return {
+                        'demand_summary': parsed_result.get('demand_summary', 'No demand data available for summarization'),
+                        'supply_summary': parsed_result.get('supply_summary', 'No supply data available for summarization'),
+                        'combined_summary': parsed_result.get('combined_summary', 'Insufficient data for market outlook')
+                    }
+                else:
+                    raise ValueError("No JSON found in response")
+                    
+            except Exception as parse_error:
+                print(f"[ERROR] Manual JSON parsing failed: {parse_error}")
+                return {
+                    'demand_summary': 'No demand data available for summarization',
+                    'supply_summary': 'No supply data available for summarization', 
+                    'combined_summary': 'Insufficient data for market outlook'
+                }
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to summarize with Bedrock: {e}")
+        return {
+            'demand_summary': 'Error in summarization',
+            'supply_summary': 'Error in summarization',
+            'combined_summary': 'Error in summarization'
+        }

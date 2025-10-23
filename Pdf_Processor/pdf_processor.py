@@ -300,7 +300,7 @@ if __name__ == "__main__":
         "Records": [{
             "s3": {
                 "bucket": {"name": "private-bucket-fastapi"},
-                "object": {"key": "pdfs/d1ccc743-29bb-40d6-b937-060a2962db17.pdf"}
+                "object": {"key": "pdfs/36d691af-70b8-403b-85fe-d30d5e57694f.pdf"}
             }
         }]
     }, None)
