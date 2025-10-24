@@ -4,7 +4,7 @@ import os
 # import correlation_value
 import porters_analysis
 import forecast_recommendation
-# import negotiation_obj
+import negotiation_obj
 # import demand_supply_summary
 
 def lambda_handler(event, context):
@@ -212,71 +212,72 @@ def lambda_handler(event, context):
                 "body": json.dumps({"error": f"Error generating forecast recommendation: {str(e)}"})
             }
 
-    # elif action == "negotiation_avoids":
-    #     # Negotiation avoids analysis request
-    #     # This is the fire-and-forget handler - it processes and saves to DB
-    #     try:
-    #         material_id = body.get("material_id")
-    #         vendor_name = body.get("vendor_name")
-    #         region = body.get("region", "Asia-Pacific")
-    #         date = body.get("date")
-    #         force_refresh = body.get("force_refresh", False)
+    elif action == "negotiation_avoids":
+        # Negotiation avoids analysis request
+        # This is the fire-and-forget handler - it processes and saves to DB
+        try:
+            material_id = body.get("material_id")
+            vendor_name = body.get("vendor_name")
+            location_id = body.get("location_id")
+            date = body.get("date")
+            force_refresh = body.get("force_refresh", False)
             
-    #         print(f"🔥 [NEGOTIATION_AVOIDS] Processing for vendor={vendor_name}, material={material_id}, date={date}, force_refresh={force_refresh}")
+            print(f"🔥 [NEGOTIATION_AVOIDS] Processing for vendor={vendor_name}, material={material_id}, location={location_id}, date={date}, force_refresh={force_refresh}")
 
-    #         if not vendor_name or not material_id or not date:
-    #             return {
-    #                 "statusCode": 400,
-    #                 "headers": {
-    #                     "Content-Type": "application/json",
-    #                     "Access-Control-Allow-Origin": "*"
-    #                 },
-    #                 "body": json.dumps({
-    #                     "error": "Missing required parameters: 'vendor_name', 'material_id', or 'date'"
-    #                 })
-    #             }
+            if not vendor_name or not material_id or not date or not location_id:
+                return {
+                    "statusCode": 400,
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    },
+                    "body": json.dumps({
+                        "error": "Missing required parameters: 'vendor_name', 'material_id', 'location_id', or 'date'"
+                    })
+                }
 
-    #         # Pass to negotiation_obj.lambda_handler which handles the full workflow
-    #         negotiation_event = {
-    #             "vendor_name": vendor_name,
-    #             "material_id": material_id,
-    #             "region": region,
-    #             "date": date,
-    #             "force_refresh": force_refresh
-    #         }
+            # Pass to negotiation_obj.lambda_handler which handles the full workflow
+            negotiation_event = {
+                "action": "negotiation_avoids",
+                "vendor_name": vendor_name,
+                "material_id": material_id,
+                "location_id": location_id,
+                "date": date,
+                "force_refresh": force_refresh
+            }
             
-    #         # This function now handles DB operations internally
-    #         result = negotiation_obj.lambda_handler(negotiation_event, context)
+            # This function now handles DB operations internally
+            result = negotiation_obj.lambda_handler(negotiation_event, context)
             
-    #         # Check if result is already a proper response dict
-    #         if isinstance(result, dict) and "statusCode" in result:
-    #             return result
+            # Check if result is already a proper response dict
+            if isinstance(result, dict) and "statusCode" in result:
+                return result
             
-    #         # Otherwise wrap it
-    #         return {
-    #             "statusCode": 200,
-    #             "headers": {
-    #                 "Content-Type": "application/json",
-    #                 "Access-Control-Allow-Origin": "*"
-    #             },
-    #             "body": json.dumps(result) if isinstance(result, dict) else result
-    #         }
+            # Otherwise wrap it
+            return {
+                "statusCode": 200,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*"
+                },
+                "body": json.dumps(result) if isinstance(result, dict) else result
+            }
             
-    #     except Exception as e:
-    #         print(f"❌ [NEGOTIATION_AVOIDS ERROR] {str(e)}")
-    #         import traceback
-    #         print(traceback.format_exc())
-    #         return {
-    #             "statusCode": 500,
-    #             "headers": {
-    #                 "Content-Type": "application/json",
-    #                 "Access-Control-Allow-Origin": "*"
-    #             },
-    #             "body": json.dumps({
-    #                 "error": f"Error generating negotiation avoids analysis: {str(e)}",
-    #                 "trace": traceback.format_exc()
-    #             })
-    #         }
+        except Exception as e:
+            print(f"❌ [NEGOTIATION_AVOIDS ERROR] {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            return {
+                "statusCode": 500,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*"
+                },
+                "body": json.dumps({
+                    "error": f"Error generating negotiation avoids analysis: {str(e)}",
+                    "trace": traceback.format_exc()
+                })
+            }
 
     # elif action == "demand_supply_summary":
     #     # Demand and supply summary request
