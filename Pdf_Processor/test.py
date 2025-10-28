@@ -87,3 +87,39 @@ text = query_bedrock_with_image("page_0_part0.png")
 # Print the first few lines
 print("\n--- Extracted Text ---\n")
 print(text)
+
+# Test price extraction functionality
+def test_price_extraction():
+    """Test the price extraction and upsert functionality"""
+    from extract_market_intelligence import DatabaseManager
+    
+    # Sample extracted text with price information
+    sample_text = """
+    Ethylene prices in Asia-Pacific region have shown significant volatility.
+    Current spot prices are $850-900 per metric ton as of 2024-01-15.
+    Contract prices for Q1 2024 are expected to be $880-920 per MT.
+    European ethylene prices remain stable at $820-850 per MT.
+    """
+    
+    print("\n--- Testing Price Extraction ---")
+    try:
+        db = DatabaseManager()
+        result = db.extract_and_upsert_prices(
+            sample_text,
+            "Ethylene",
+            "102089-000000",  # Sample material_id
+            "212"  # Sample location_id
+        )
+        
+        print(f"Price extraction result: {result}")
+        
+        if result.get("success"):
+            print(f"✅ Successfully processed {result['processed_count']}/{result['total_entries']} price entries")
+        else:
+            print(f"❌ Price extraction failed: {result.get('error')}")
+            
+    except Exception as e:
+        print(f"❌ Test failed: {e}")
+
+# Run the test
+test_price_extraction()

@@ -415,6 +415,8 @@ def price_by_date_agent(extracted_text, material):
     return price_list
 
 
+
+
 def summarize_demand_supply_with_bedrock(demand_data, supply_data, material_id, location_id, summary_date):
     """
     Uses AWS Bedrock to summarize demand and supply data.

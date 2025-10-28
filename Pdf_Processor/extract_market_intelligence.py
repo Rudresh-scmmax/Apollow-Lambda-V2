@@ -2,7 +2,7 @@ from datetime import datetime, date, timezone
 import json
 from db_query import database_query
 # Assuming the updated extract_demand_supply_outlook_agent is now in llm_module
-from llm_module import extract_demand_supply_outlook_agent, news_agent, classify_news_tags, summarize_demand_supply_with_bedrock 
+from llm_module import extract_demand_supply_outlook_agent, news_agent, classify_news_tags, summarize_demand_supply_with_bedrock, price_by_date_agent 
 
 class DatabaseManager:
     def get_material_id(self, material):
@@ -341,6 +341,227 @@ class DatabaseManager:
                 'success': False,
                 'message': f'Error processing summary: {str(e)}',
                 'data': None
+            }
+
+    def upsert_price_history_data(self, price_data, material_id, location_id):
+        """
+        Insert or update price data in price_history_data table.
+        
+        Args:
+            price_data (list): List of price dictionaries from price_by_date_agent
+            material_id (str): Material ID
+            location_id (str): Location ID
+            
+        Returns:
+            dict: Success status and count of processed records
+        """
+        import uuid
+        
+        try:
+            processed_count = 0
+            errors = []
+            
+            for price_entry in price_data:
+                try:
+                    # Extract required fields
+                    price_date = price_entry.get('date')
+                    price_value = price_entry.get('price')
+                    price_type = price_entry.get('price_type', 'Spot')
+                    unit = price_entry.get('unit', 'MT')
+                    region = price_entry.get('region', 'Unknown')
+                    
+                    if not price_date or not price_value:
+                        errors.append(f"Missing date or price for entry: {price_entry}")
+                        continue
+                    
+                    # Parse date
+                    try:
+                        if isinstance(price_date, str):
+                            price_date_obj = datetime.strptime(price_date, '%Y-%m-%d').date()
+                        else:
+                            price_date_obj = price_date
+                    except ValueError:
+                        errors.append(f"Invalid date format: {price_date}")
+                        continue
+                    
+                    # Generate unique ID for the record
+                    price_id = str(uuid.uuid4())
+                    
+                    # Set period dates (assuming single day period)
+                    period_start_date = price_date_obj
+                    period_end_date = price_date_obj
+                    
+                    # Round price to 2 decimal places
+                    rounded_price = round(float(price_value), 2)
+                    
+                    # Check if record already exists
+                    check_query = """
+                        SELECT material_price_type_period_id, period_start_date, price
+                        FROM price_history_data
+                        WHERE material_id = %s 
+                          AND location_id = %s 
+                          AND period_start_date = %s
+                          AND price_type = %s
+                        LIMIT 1;
+                    """
+                    
+                    result = database_query(check_query, [material_id, location_id, price_date_obj, price_type])
+                    
+                    if isinstance(result, dict) and result.get('statusCode') == 500:
+                        errors.append(f"Database error checking existing record: {result.get('error')}")
+                        continue
+                    
+                    # Handle different response formats
+                    if isinstance(result, str):
+                        try:
+                            body = json.loads(result)
+                        except json.JSONDecodeError:
+                            body = []
+                    elif isinstance(result, dict) and "body" in result:
+                        try:
+                            body = json.loads(result["body"])
+                        except json.JSONDecodeError:
+                            body = []
+                    else:
+                        body = result
+                    
+                    if not isinstance(body, list):
+                        body = []
+                    
+                    if body and len(body) > 0:
+                        # Record exists, check if we should update
+                        existing_record = body[0]
+                        existing_date = existing_record.get('period_start_date')
+                        existing_price = existing_record.get('price')
+                        
+                        # Convert existing date to date object if it's a string
+                        if isinstance(existing_date, str):
+                            try:
+                                existing_date = datetime.strptime(existing_date, '%Y-%m-%d').date()
+                            except ValueError:
+                                existing_date = datetime.strptime(existing_date.split('T')[0], '%Y-%m-%d').date()
+                        
+                        # Update if new date is more recent or price is different
+                        if price_date_obj >= existing_date and rounded_price != float(existing_price):
+                            update_query = """
+                                UPDATE price_history_data
+                                SET price = %s, 
+                                    price_currency = %s,
+                                    price_history_source = %s,
+                                    period_start_date = %s,
+                                    period_end_date = %s
+                                WHERE material_id = %s 
+                                  AND location_id = %s 
+                                  AND period_start_date = %s
+                                  AND price_type = %s;
+                            """
+                            
+                            update_result = database_query(update_query, [
+                                rounded_price,
+                                'USD',  # Default currency
+                                'market_research_report',
+                                price_date_obj,
+                                period_end_date,
+                                material_id,
+                                location_id,
+                                existing_date,
+                                price_type
+                            ])
+                            
+                            if isinstance(update_result, dict) and update_result.get('statusCode') == 500:
+                                errors.append(f"Database error updating record: {update_result.get('error')}")
+                            else:
+                                processed_count += 1
+                                print(f"[SUCCESS] Updated price {rounded_price} for material {material_id}, location {location_id}, date {price_date_obj}")
+                        else:
+                            print(f"[INFO] Skipping update: existing record is newer or same price")
+                    else:
+                        # Record doesn't exist, insert new one
+                        insert_query = """
+                            INSERT INTO price_history_data 
+                            (material_price_type_period_id, material_id, period_start_date, period_end_date, 
+                             country, price, price_currency, price_history_source, price_type, location_id)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                        """
+                        
+                        insert_result = database_query(insert_query, [
+                            price_id,
+                            material_id,
+                            period_start_date,
+                            period_end_date,
+                            region,
+                            rounded_price,
+                            'USD',  # Default currency
+                            'market_research_report',
+                            price_type,
+                            location_id
+                        ])
+                        
+                        if isinstance(insert_result, dict) and insert_result.get('statusCode') == 500:
+                            errors.append(f"Database error inserting record: {insert_result.get('error')}")
+                        else:
+                            processed_count += 1
+                            print(f"[SUCCESS] Inserted price {rounded_price} for material {material_id}, location {location_id}, date {price_date_obj}")
+                    
+                except Exception as e:
+                    errors.append(f"Error processing price entry {price_entry}: {str(e)}")
+                    continue
+            
+            return {
+                "success": True,
+                "processed_count": processed_count,
+                "total_entries": len(price_data),
+                "errors": errors
+            }
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to upsert price history data: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "processed_count": 0,
+                "total_entries": len(price_data) if price_data else 0
+            }
+
+    def extract_and_upsert_prices(self, extracted_text, material, material_id, location_id):
+        """
+        Extract prices from text and upsert them into price_history_data table.
+        
+        Args:
+            extracted_text (str): The extracted text from PDF
+            material (str): Material name
+            material_id (str): Material ID for the database
+            location_id (str): Location ID for the database
+            
+        Returns:
+            dict: Result of the upsert operation
+        """
+        try:
+            # Extract price data using the existing agent
+            price_data = price_by_date_agent(extracted_text, material)
+            
+            if not price_data:
+                return {
+                    "success": True,
+                    "message": "No price data found in text",
+                    "processed_count": 0,
+                    "total_entries": 0
+                }
+            
+            print(f"[INFO] Extracted {len(price_data)} price entries from text")
+            
+            # Upsert the price data
+            result = self.upsert_price_history_data(price_data, material_id, location_id)
+            
+            return result
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to extract and upsert prices: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "processed_count": 0,
+                "total_entries": 0
             }
 
 
