@@ -205,33 +205,12 @@ def lambda_handler(event, context):
             
             print(f"Successfully inserted {inserted_count} news items out of {len(news_items)}")
             
-            # Extract and upsert price data from news (best effort)
+            # Capture market intelligence including price extraction and supplier shutdowns (best effort)
             try:
-                print("Extracting price data from news...")
-                # Get location_id from the first available location (you might want to make this more specific)
-                location_query = "SELECT location_id FROM location_master LIMIT 1"
-                location_result = database_query(location_query)
-                location_body = json.loads(location_result["body"])
-                default_location_id = location_body[0].get("location_id") if location_body else "212"  # fallback
-                
-                # Use DatabaseManager for price extraction
-                db = DatabaseManager()
-                price_result = db.extract_and_upsert_prices(
-                    all_extracted_text, 
-                    material_description, 
-                    material_id, 
-                    str(default_location_id)
-                )
-                
-                if price_result.get("success"):
-                    print(f"[SUCCESS] Price extraction from news completed: {price_result['processed_count']}/{price_result['total_entries']} records processed")
-                    if price_result.get("errors"):
-                        print(f"[WARNING] Price extraction errors: {price_result['errors']}")
-                else:
-                    print(f"[WARNING] Price extraction from news failed: {price_result.get('error', 'Unknown error')}")
-                    
-            except Exception as price_error:
-                print(f"Error extracting prices from news: {price_error}")
+                print("Capturing market intelligence from news...")
+                capture_market_intelligence(all_extracted_text, report_link, user_id, material_description, material_id)
+            except Exception as mi_error:
+                print(f"Error capturing market intelligence from news: {mi_error}")
             
             # Update status
             completed_query = "UPDATE market_research_status SET status = %s WHERE id = %s"
@@ -294,33 +273,6 @@ def lambda_handler(event, context):
             except Exception as mi_error:
                 print(f"Error capturing market intelligence: {mi_error}")
 
-            # Extract and upsert price data (best effort)
-            try:
-                print("Extracting price data from PDF...")
-                # Get location_id from the first available location (you might want to make this more specific)
-                location_query = "SELECT location_id FROM location_master LIMIT 1"
-                location_result = database_query(location_query)
-                location_body = json.loads(location_result["body"])
-                default_location_id = location_body[0].get("location_id") if location_body else "212"  # fallback
-                
-                # Use DatabaseManager for price extraction
-                db = DatabaseManager()
-                price_result = db.extract_and_upsert_prices(
-                    all_extracted_text, 
-                    material_description, 
-                    material_id, 
-                    str(default_location_id)
-                )
-                
-                if price_result.get("success"):
-                    print(f"[SUCCESS] Price extraction completed: {price_result['processed_count']}/{price_result['total_entries']} records processed")
-                    if price_result.get("errors"):
-                        print(f"[WARNING] Price extraction errors: {price_result['errors']}")
-                else:
-                    print(f"[WARNING] Price extraction failed: {price_result.get('error', 'Unknown error')}")
-                    
-            except Exception as price_error:
-                print(f"Error extracting prices: {price_error}")
 
         except Exception as error:
             print("Error processing JSON:", error)

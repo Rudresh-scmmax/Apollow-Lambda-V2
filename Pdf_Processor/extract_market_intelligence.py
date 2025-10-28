@@ -2,7 +2,7 @@ from datetime import datetime, date, timezone
 import json
 from db_query import database_query
 # Assuming the updated extract_demand_supply_outlook_agent is now in llm_module
-from llm_module import extract_demand_supply_outlook_agent, news_agent, classify_news_tags, summarize_demand_supply_with_bedrock, price_by_date_agent 
+from llm_module import extract_demand_supply_outlook_agent, news_agent, classify_news_tags, summarize_demand_supply_with_bedrock, price_by_date_agent, supplier_shutdowns_agent 
 
 class DatabaseManager:
     def get_material_id(self, material):
@@ -564,6 +564,137 @@ class DatabaseManager:
                 "total_entries": 0
             }
 
+    def insert_supplier_shutdown(self, shutdown_item, material_id, report_url, user_id):
+        """Inserts a single supplier shutdown item into supplier_shutdowns table."""
+        try:
+            location_id = self.get_location_id(shutdown_item["region"])
+            
+            # Parse shutdown dates
+            shutdown_from = shutdown_item.get("shutdown_from")
+            shutdown_to = shutdown_item.get("shutdown_to")
+            
+            if shutdown_from and isinstance(shutdown_from, str):
+                try:
+                    shutdown_from = datetime.strptime(shutdown_from, "%Y-%m-%d").date()
+                except ValueError:
+                    print(f"[WARNING] Invalid shutdown_from format: {shutdown_from}")
+                    shutdown_from = None
+            
+            if shutdown_to and isinstance(shutdown_to, str):
+                try:
+                    shutdown_to = datetime.strptime(shutdown_to, "%Y-%m-%d").date()
+                except ValueError:
+                    print(f"[WARNING] Invalid shutdown_to format: {shutdown_to}")
+                    shutdown_to = None
+            
+            # Convert dates to string for JSON serialization
+            if shutdown_from and isinstance(shutdown_from, date):
+                shutdown_from = shutdown_from.isoformat()
+            if shutdown_to and isinstance(shutdown_to, date):
+                shutdown_to = shutdown_to.isoformat()
+            
+            # Handle published_date
+            published_date = shutdown_item.get("published_date")
+            if published_date and isinstance(published_date, str):
+                try:
+                    published_date = datetime.strptime(published_date, "%Y-%m-%d").date()
+                except ValueError:
+                    print(f"[WARNING] Invalid published_date format: {published_date}")
+                    published_date = None
+            
+            if published_date and isinstance(published_date, date):
+                published_date = published_date.isoformat()
+            
+            # Ensure source_link is handled correctly
+            source_link = shutdown_item.get("source_link") or report_url
+            if source_link and not isinstance(source_link, str):
+                source_link = None
+
+            database_query(
+                """
+                INSERT INTO supplier_shutdowns (
+                    material_id, location_id, producer, shutdown_from, shutdown_to,
+                    impact, key_takeaway, region, source, source_link, 
+                    published_date, upload_user_id
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                [
+                    material_id,
+                    location_id,
+                    shutdown_item["producer"],
+                    shutdown_from,
+                    shutdown_to,
+                    shutdown_item.get("impact"),
+                    shutdown_item.get("key_takeaway"),
+                    shutdown_item["region"],
+                    'Report',
+                    source_link,
+                    published_date,
+                    user_id
+                ]
+            )
+            print(f"[SUCCESS] Inserted supplier shutdown for material_id={material_id}, producer={shutdown_item['producer']}")
+            return True
+        except Exception as e:
+            print(f"[ERROR] Supplier shutdown insert failed for {shutdown_item}: {e}")
+            return False
+
+    def extract_and_upsert_supplier_shutdowns(self, extracted_text, material, material_id, location_id, report_url, user_id):
+        """
+        Extract supplier shutdowns from text and upsert them into supplier_shutdowns table.
+        
+        Args:
+            extracted_text (str): The extracted text from PDF
+            material (str): Material name
+            material_id (str): Material ID for the database
+            location_id (str): Location ID for the database
+            report_url (str): Source report URL
+            user_id (int): User ID for tracking
+            
+        Returns:
+            dict: Result of the upsert operation
+        """
+        try:
+            # Extract shutdown data using the existing agent
+            shutdown_data = supplier_shutdowns_agent(extracted_text, material)
+            
+            if not shutdown_data:
+                return {
+                    "success": True,
+                    "message": "No supplier shutdown data found in text",
+                    "processed_count": 0,
+                    "total_entries": 0
+                }
+            
+            print(f"[INFO] Extracted {len(shutdown_data)} supplier shutdown entries from text")
+            
+            # Insert the shutdown data
+            processed_count = 0
+            errors = []
+            
+            for shutdown_item in shutdown_data:
+                if self.insert_supplier_shutdown(shutdown_item, material_id, report_url, user_id):
+                    processed_count += 1
+                else:
+                    errors.append(f"Failed to insert shutdown: {shutdown_item.get('producer', 'Unknown')}")
+            
+            return {
+                "success": True,
+                "processed_count": processed_count,
+                "total_entries": len(shutdown_data),
+                "errors": errors
+            }
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to extract and upsert supplier shutdowns: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "processed_count": 0,
+                "total_entries": 0
+            }
+
 
 def capture_market_intelligence(plain_text, report_url, user_id, material, material_id):
     """
@@ -644,6 +775,60 @@ def capture_market_intelligence(plain_text, report_url, user_id, material, mater
                 print(f"[SUCCESS] Inserted news item: {news_item}")
             else:
                 print(f"[WARNING] Failed to insert news item: {news_item}")
+
+        # Extract and upsert price data (best effort)
+        try:
+            print("Extracting price data from text...")
+            # Get location_id from the first available location (you might want to make this more specific)
+            location_query = "SELECT location_id FROM location_master LIMIT 1"
+            location_result = database_query(location_query)
+            location_body = json.loads(location_result["body"])
+            default_location_id = location_body[0].get("location_id") if location_body else "212"  # fallback
+            
+            price_result = db.extract_and_upsert_prices(
+                plain_text, 
+                material, 
+                material_id, 
+                str(default_location_id)
+            )
+            
+            if price_result.get("success"):
+                print(f"[SUCCESS] Price extraction completed: {price_result['processed_count']}/{price_result['total_entries']} records processed")
+                if price_result.get("errors"):
+                    print(f"[WARNING] Price extraction errors: {price_result['errors']}")
+            else:
+                print(f"[WARNING] Price extraction failed: {price_result.get('error', 'Unknown error')}")
+                
+        except Exception as price_error:
+            print(f"Error extracting prices: {price_error}")
+
+        # Extract and upsert supplier shutdowns (best effort)
+        try:
+            print("Extracting supplier shutdowns from text...")
+            # Get location_id from the first available location (you might want to make this more specific)
+            location_query = "SELECT location_id FROM location_master LIMIT 1"
+            location_result = database_query(location_query)
+            location_body = json.loads(location_result["body"])
+            default_location_id = location_body[0].get("location_id") if location_body else "212"  # fallback
+            
+            shutdown_result = db.extract_and_upsert_supplier_shutdowns(
+                plain_text, 
+                material, 
+                material_id, 
+                str(default_location_id),
+                report_url,
+                user_id
+            )
+            
+            if shutdown_result.get("success"):
+                print(f"[SUCCESS] Supplier shutdowns extraction completed: {shutdown_result['processed_count']}/{shutdown_result['total_entries']} records processed")
+                if shutdown_result.get("errors"):
+                    print(f"[WARNING] Supplier shutdowns extraction errors: {shutdown_result['errors']}")
+            else:
+                print(f"[WARNING] Supplier shutdowns extraction failed: {shutdown_result.get('error', 'Unknown error')}")
+                
+        except Exception as shutdown_error:
+            print(f"Error extracting supplier shutdowns: {shutdown_error}")
 
         return {
             'statusCode': 200,

@@ -121,5 +121,41 @@ def test_price_extraction():
     except Exception as e:
         print(f"❌ Test failed: {e}")
 
-# Run the test
+# Test supplier shutdowns extraction functionality
+def test_supplier_shutdowns_extraction():
+    """Test the supplier shutdowns extraction and upsert functionality"""
+    from extract_market_intelligence import DatabaseManager
+    
+    # Sample extracted text with supplier shutdown information
+    sample_text = """
+    Major ethylene producer BASF announced a planned shutdown of their Ludwigshafen plant 
+    from 2024-03-15 to 2024-04-30 for maintenance. This will impact regional supply 
+    significantly. Dow Chemical also reported an unplanned shutdown at their Texas facility 
+    starting 2024-02-20 due to equipment failure, with restart expected by 2024-03-10.
+    """
+    
+    print("\n--- Testing Supplier Shutdowns Extraction ---")
+    try:
+        db = DatabaseManager()
+        result = db.extract_and_upsert_supplier_shutdowns(
+            sample_text,
+            "Ethylene",
+            "102089-000000",  # Sample material_id
+            "212",  # Sample location_id
+            "https://example.com/report",  # Sample report URL
+            1  # Sample user_id
+        )
+        
+        print(f"Supplier shutdowns extraction result: {result}")
+        
+        if result.get("success"):
+            print(f"✅ Successfully processed {result['processed_count']}/{result['total_entries']} shutdown entries")
+        else:
+            print(f"❌ Supplier shutdowns extraction failed: {result.get('error')}")
+            
+    except Exception as e:
+        print(f"❌ Test failed: {e}")
+
+# Run the tests
 test_price_extraction()
+test_supplier_shutdowns_extraction()

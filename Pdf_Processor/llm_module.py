@@ -360,30 +360,88 @@ def extract_demand_supply_outlook_agent(extracted_text: str, material: str):
 
 def supplier_shutdowns_agent(extracted_text, material):
     """
-    Extract supplier shutdown events and detect the main region.
+    Extract supplier shutdown events and normalize fields for DB insertion.
+    Returns a list of dicts with keys:
+    producer, shutdown_from, shutdown_to, impact, key_takeaway, region, published_date, source_link
     """
     system_msg = f"""
-    You are a helpful assistant that extracts supplier shutdown events for the material '{material}'.
-    
-    For each event:
-    - Include "producer", "shutdown_from", "shutdown_to", "impact", "key_takeaway"
-    - Extract **only the main region** ("region"). If multiple regions are mentioned, return the primary one.
-    - Include "material": '{material}'
-    
-    Respond strictly in JSON.
+    You are an expert analyst extracting SUPPLIER SHUTDOWN events related to the material "{material}".
+
+    Return STRICT JSON ONLY: an array of objects. No prose, no markdown.
+    Each object MUST have these keys (use empty string for missing):
+      - "producer": company/site causing the shutdown (string)
+      - "shutdown_from": start date in YYYY-MM-DD (string)
+      - "shutdown_to": end date in YYYY-MM-DD or empty string if unknown (string)
+      - "impact": short effect on supply/availability (string)
+      - "key_takeaway": concise 1–2 sentence summary (string)
+      - "region": the PRIMARY region only (e.g., "Asia-Pacific") (string)
+      - "published_date": news/report date in YYYY-MM-DD if known else empty string (string)
+      - "source_link": URL if present else empty string (string)
+
+    Rules:
+      - Normalize all dates to YYYY-MM-DD. If only YYYY-MM is found, use first day of month.
+      - If multiple regions listed, return only the main umbrella region (e.g., last or most general).
+      - Exclude non-shutdown maintenance suggestions unless a plant/unit is actually down or scheduled to be down.
+      - If nothing is found, return [] (empty JSON array).
     """
-    shutdowns = invoke_bedrock_text(system_msg, extracted_text)
-    
-    if not isinstance(shutdowns, list):
+
+    raw = invoke_bedrock_text(system_msg.strip(), extracted_text.strip())
+
+    if not isinstance(raw, list):
         return []
-    
-    for event in shutdowns:
-        event["material"] = material
-        region = event.get("region")
+
+    cleaned = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+
+        producer = (item.get("producer") or "").strip()
+        region = (item.get("region") or "").strip()
         if region:
-            event["region"] = region.split(",")[-1].strip()
-    
-    return shutdowns
+            region = region.split(",")[-1].strip()
+
+        # Normalize dates to YYYY-MM-DD when possible
+        def norm_date(value):
+            v = (value or "").strip()
+            if not v:
+                return ""
+            # Accept YYYY-MM-DD, YYYY/MM/DD, YYYY-MM, YYYY
+            v2 = v.replace("/", "-")
+            parts = v2.split("-")
+            try:
+                if len(parts) == 3 and len(parts[0]) == 4:
+                    y, m, d = parts
+                    m = m.zfill(2)
+                    d = d.zfill(2)
+                    return f"{y}-{m}-{d}"
+                if len(parts) == 2 and len(parts[0]) == 4:
+                    y, m = parts
+                    m = m.zfill(2)
+                    return f"{y}-{m}-01"
+                if len(parts) == 1 and len(parts[0]) == 4:
+                    y = parts[0]
+                    return f"{y}-01-01"
+            except Exception:
+                pass
+            return ""
+
+        shutdown_from = norm_date(item.get("shutdown_from"))
+        shutdown_to = norm_date(item.get("shutdown_to"))
+        published_date = norm_date(item.get("published_date"))
+
+        cleaned.append({
+            "producer": producer,
+            "shutdown_from": shutdown_from,
+            "shutdown_to": shutdown_to,
+            "impact": (item.get("impact") or "").strip(),
+            "key_takeaway": (item.get("key_takeaway") or "").strip(),
+            "region": region,
+            "published_date": published_date,
+            "source_link": (item.get("source_link") or "").strip(),
+            "material": material
+        })
+
+    return cleaned
 
 
 def price_by_date_agent(extracted_text, material):
