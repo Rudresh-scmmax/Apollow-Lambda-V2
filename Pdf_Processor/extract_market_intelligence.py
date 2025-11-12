@@ -2,7 +2,7 @@ from datetime import datetime, date, timezone
 import json
 from db_query import database_query
 # Assuming the updated extract_demand_supply_outlook_agent is now in llm_module
-from llm_module import extract_demand_supply_outlook_agent, news_agent, classify_news_tags, summarize_demand_supply_with_bedrock, price_by_date_agent, supplier_shutdowns_agent 
+from llm_module import extract_demand_supply_outlook_agent, news_agent, classify_news_tags, summarize_demand_supply_with_bedrock, price_by_date_agent, supplier_shutdowns_agent, supplier_tracking_agent 
 
 class DatabaseManager:
     def get_material_id(self, material):
@@ -688,6 +688,129 @@ class DatabaseManager:
             
         except Exception as e:
             print(f"[ERROR] Failed to extract and upsert supplier shutdowns: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "processed_count": 0,
+                "total_entries": 0
+            }
+
+    def insert_supplier_tracking(self, tracking_item, material_id, location_id, report_url, user_id):
+        """
+        Insert a single supplier tracking event into the database.
+        
+        Args:
+            tracking_item (dict): Supplier tracking event data
+            material_id (str): Material ID for the database
+            report_url (str): Source report URL
+            user_id (int): User ID for tracking
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Use provided location_id directly
+            
+            # Parse dates
+            event_date = tracking_item.get('event_date', '')
+            published_date = tracking_item.get('published_date', '')
+            
+            # Convert dates to proper format
+            event_date = self._parse_date(event_date) if event_date else None
+            published_date = self._parse_date(published_date) if published_date else None
+            
+            if not event_date:
+                print(f"[WARNING] Invalid event_date for supplier tracking: {tracking_item.get('event_date')}")
+                return False
+            
+            # Prepare data for insertion
+            tracking_data = {
+                'material_id': material_id,
+                'location_id': location_id,
+                'supplier_name': tracking_item.get('supplier_name', ''),
+                'event_title': tracking_item.get('event_title', ''),
+                'event_description': tracking_item.get('event_description', ''),
+                'event_date': event_date,
+                'key_takeaway': tracking_item.get('key_takeaway', ''),
+                'source': tracking_item.get('source', 'Market Research Report'),
+                'source_link': tracking_item.get('source_link', report_url),
+                'published_date': published_date,
+                'upload_user_id': user_id
+            }
+            
+            # Insert into database
+            insert_query = """
+            INSERT INTO supplier_tracking (
+                material_id, location_id, supplier_name, event_title, event_description,
+                event_date, key_takeaway, source, source_link, published_date, upload_user_id
+            ) VALUES (
+                %(material_id)s, %(location_id)s, %(supplier_name)s, %(event_title)s, %(event_description)s,
+                %(event_date)s, %(key_takeaway)s, %(source)s, %(source_link)s, %(published_date)s, %(upload_user_id)s
+            ) RETURNING id, event_date;
+            """
+            
+            result = database_query(insert_query, tracking_data)
+            
+            if result and len(result) > 0:
+                tracking_id = result[0]['id']
+                print(f"[SUCCESS] Inserted supplier tracking event: {tracking_item.get('supplier_name')} - {tracking_item.get('event_type')}")
+                return True
+            else:
+                print(f"[ERROR] Failed to insert supplier tracking event: {tracking_item.get('supplier_name')}")
+                return False
+                
+        except Exception as e:
+            print(f"[ERROR] Supplier tracking insert failed for {tracking_item}: {e}")
+            return False
+
+    def extract_and_upsert_supplier_tracking(self, extracted_text, material, material_id, location_id, report_url, user_id):
+        """
+        Extract supplier tracking events from text and upsert them into supplier_tracking table.
+        
+        Args:
+            extracted_text (str): The extracted text from PDF
+            material (str): Material name
+            material_id (str): Material ID for the database
+            location_id (str): Location ID for the database
+            report_url (str): Source report URL
+            user_id (int): User ID for tracking
+            
+        Returns:
+            dict: Result of the upsert operation
+        """
+        try:
+            # Extract tracking data using the existing agent
+            tracking_data = supplier_tracking_agent(extracted_text, material)
+            
+            if not tracking_data:
+                return {
+                    "success": True,
+                    "message": "No supplier tracking data found in text",
+                    "processed_count": 0,
+                    "total_entries": 0
+                }
+            
+            print(f"[INFO] Extracted {len(tracking_data)} supplier tracking entries from text")
+            
+            # Insert the tracking data
+            processed_count = 0
+            errors = []
+            
+            for tracking_item in tracking_data:
+                if self.insert_supplier_tracking(tracking_item, material_id, location_id, report_url, user_id):
+                    processed_count += 1
+                else:
+                    errors.append(f"Failed to insert tracking event: {tracking_item.get('supplier_name', 'Unknown')}")
+            
+            return {
+                "success": True,
+                "processed_count": processed_count,
+                "total_entries": len(tracking_data),
+                "errors": errors
+            }
+            
+        except Exception as e:
+            print(f"[ERROR] Supplier tracking extraction failed: {e}")
             return {
                 "success": False,
                 "error": str(e),

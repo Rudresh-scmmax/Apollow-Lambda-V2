@@ -473,6 +473,85 @@ def price_by_date_agent(extracted_text, material):
     return price_list
 
 
+def supplier_tracking_agent(extracted_text, material):
+    """
+    Extract supplier development events with minimal fields for DB insertion.
+    Returns list of dicts with keys: supplier_name, event_title, event_description, event_date, key_takeaway, source_link, published_date.
+    """
+    system_msg = f"""
+    You are extracting SUPPLIER DEVELOPMENT EVENTS for "{material}".
+
+    Return STRICT JSON ONLY: an array of objects. No prose.
+    Each object MUST have these keys (use empty string for missing):
+      - "supplier_name": company name
+      - "event_title": short descriptive title
+      - "event_description": brief description
+      - "event_date": event date in YYYY-MM-DD
+      - "key_takeaway": concise 1–2 sentence impact
+      - "source_link": URL if present else empty string
+      - "published_date": news/report date in YYYY-MM-DD if known
+
+    Rules:
+      - Normalize all dates to YYYY-MM-DD (fallback YYYY-MM -> first day)
+      - Only include real supplier development events
+      - If nothing is found, return []
+    """
+
+    raw = invoke_bedrock_text(system_msg.strip(), extracted_text.strip())
+
+    if not isinstance(raw, list):
+        return []
+
+    cleaned = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+
+        supplier_name = (item.get("supplier_name") or "").strip()
+        if not supplier_name:
+            continue
+
+        # Normalize dates to YYYY-MM-DD when possible
+        def norm_date(value):
+            v = (value or "").strip()
+            if not v:
+                return ""
+            v2 = v.replace("/", "-")
+            parts = v2.split("-")
+            try:
+                if len(parts) == 3 and len(parts[0]) == 4:
+                    y, m, d = parts
+                    m = m.zfill(2)
+                    d = d.zfill(2)
+                    return f"{y}-{m}-{d}"
+                if len(parts) == 2 and len(parts[0]) == 4:
+                    y, m = parts
+                    m = m.zfill(2)
+                    return f"{y}-{m}-01"
+                if len(parts) == 1 and len(parts[0]) == 4:
+                    y = parts[0]
+                    return f"{y}-01-01"
+            except Exception:
+                pass
+            return ""
+
+        event_date = norm_date(item.get("event_date"))
+        published_date = norm_date(item.get("published_date"))
+
+        cleaned.append({
+            "supplier_name": supplier_name,
+            "event_title": (item.get("event_title") or "").strip(),
+            "event_description": (item.get("event_description") or "").strip(),
+            "event_date": event_date,
+            "key_takeaway": (item.get("key_takeaway") or "").strip(),
+            "published_date": published_date,
+            "source_link": (item.get("source_link") or "").strip(),
+            "material": material
+        })
+
+    return cleaned
+
+
 
 
 def summarize_demand_supply_with_bedrock(demand_data, supply_data, material_id, location_id, summary_date):
