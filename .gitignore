@@ -22,3 +22,8 @@ __pycache__/
 */*.pyzwz
 */*.pyzwzw
 */*.pyzwzwz
+
+# OAuth tokens and credentials
+**/token.json
+**/credentials.json
+*.json.token
