@@ -5,6 +5,7 @@ import os
 import porters_analysis
 import forecast_recommendation
 import negotiation_obj
+import fact_pack
 # import demand_supply_summary
 
 def lambda_handler(event, context):
@@ -14,7 +15,7 @@ def lambda_handler(event, context):
 
     Expected event structure:
     {
-        "action": "cyclical_pattern" or "correlation" or "porters_analysis" or "negotiation_avoids" or "demand_supply_summary" or "forecast_recommendation",
+        "action": "cyclical_pattern" or "correlation" or "porters_analysis" or "negotiation_avoids" or "demand_supply_summary" or "forecast_recommendation" or "fact_pack",
         "material_id": "M036",
         "region": "China - Qingdao"
     }
@@ -37,6 +38,13 @@ def lambda_handler(event, context):
         "action": "forecast_recommendation",
         "material_id": "M036",
         "location_id": 1
+    }
+    or
+    {
+        "action": "fact_pack",
+        "bucket": "bucket-name",
+        "key": "path/to/file.pdf",
+        "rowid": 123
     }
     """
 
@@ -279,6 +287,67 @@ def lambda_handler(event, context):
                 })
             }
 
+    elif action == "fact_pack":
+        # Fact pack processing request
+        try:
+            bucket = body.get("bucket")
+            key = body.get("key")
+            rowid = body.get("rowid")
+            
+            if not bucket or not key or not rowid:
+                return {
+                    "statusCode": 400,
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    },
+                    "body": json.dumps({
+                        "error": "Missing required parameters: 'bucket', 'key', or 'rowid'"
+                    })
+                }
+            
+            fact_pack_event = {
+                "bucket": bucket,
+                "key": key,
+                "rowid": rowid
+            }
+            
+            result = fact_pack.lambda_handler(fact_pack_event, context)
+            
+            # Check if result is already a proper response dict
+            if isinstance(result, dict) and "statusCode" in result:
+                # Add CORS headers
+                if "headers" not in result:
+                    result["headers"] = {}
+                result["headers"]["Content-Type"] = "application/json"
+                result["headers"]["Access-Control-Allow-Origin"] = "*"
+                return result
+            
+            # Otherwise wrap it
+            return {
+                "statusCode": 200,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*"
+                },
+                "body": json.dumps(result) if isinstance(result, dict) else result
+            }
+            
+        except Exception as e:
+            print(f"Error processing fact pack: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            return {
+                "statusCode": 500,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*"
+                },
+                "body": json.dumps({
+                    "error": f"Error processing fact pack: {str(e)}"
+                })
+            }
+
     # elif action == "demand_supply_summary":
     #     # Demand and supply summary request
     #     try:
@@ -317,7 +386,8 @@ def lambda_handler(event, context):
                     "porters_analysis",
                     "negotiation_avoids",
                     "demand_supply_summary",
-                    "forecast_recommendation"
+                    "forecast_recommendation",
+                    "fact_pack"
                 ]
             })
         }

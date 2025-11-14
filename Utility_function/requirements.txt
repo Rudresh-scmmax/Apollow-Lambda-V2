@@ -22,3 +22,10 @@ langgraph>=0.6.10
 # Optional: useful for output parsing and structured data
 pydantic>=2.7.4
 typing-extensions>=4.10.0
+
+# File processing dependencies (for fact_pack)
+PyMuPDF>=1.23.0,<1.24.0  # fitz for PDF processing (pinned to avoid C++20 requirement)
+python-docx>=1.1.0  # for DOCX processing
+python-pptx>=0.6.23  # for PPTX processing
+pytesseract>=0.3.10  # for OCR
+Pillow>=10.0.0  # for image processing

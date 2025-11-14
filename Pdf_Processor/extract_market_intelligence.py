@@ -33,6 +33,24 @@ class DatabaseManager:
             print(f"[ERROR] Failed to get location_id for '{region}': {e}")
             return None
 
+    def get_supplier_id(self, supplier_name):
+        """Fetches supplier_id from supplier_master table."""
+        if not supplier_name:
+            return None
+        try:
+            result = database_query(
+                "SELECT supplier_id FROM supplier_master WHERE LOWER(supplier_name) = LOWER(%s)",
+                [supplier_name]
+            )
+            body = json.loads(result["body"])
+            supplier_id = body[0].get("supplier_id") if body else None
+            if not supplier_id:
+                print(f"[WARNING] Supplier '{supplier_name}' not found in supplier_master.")
+            return supplier_id
+        except Exception as e:
+            print(f"[ERROR] Failed to get supplier_id for '{supplier_name}': {e}")
+            return None
+
     
     def insert_supply_trend(self, outlook_item, material_id, report_url, user_id):
         """Inserts a single supply outlook item into demand_supply_trends."""
@@ -614,10 +632,10 @@ class DatabaseManager:
                 """
                 INSERT INTO supplier_shutdowns (
                     material_id, location_id, producer, shutdown_from, shutdown_to,
-                    impact, key_takeaway, region, source, source_link, 
+                    impact, key_takeaway, source, source_link, 
                     published_date, upload_user_id
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 [
                     material_id,
@@ -627,7 +645,6 @@ class DatabaseManager:
                     shutdown_to,
                     shutdown_item.get("impact"),
                     shutdown_item.get("key_takeaway"),
-                    shutdown_item["region"],
                     'Report',
                     source_link,
                     published_date,
@@ -722,12 +739,19 @@ class DatabaseManager:
             if not event_date:
                 print(f"[WARNING] Invalid event_date for supplier tracking: {tracking_item.get('event_date')}")
                 return False
+
+            supplier_name = tracking_item.get('supplier_name', '')
+            supplier_id = self.get_supplier_id(supplier_name)
+
+            if not supplier_id:
+                print(f"[WARNING] Skipping supplier tracking event. Supplier '{supplier_name}' not found.")
+                return False
             
             # Prepare data for insertion
             tracking_data = {
                 'material_id': material_id,
                 'location_id': location_id,
-                'supplier_name': tracking_item.get('supplier_name', ''),
+                'supplier_id': supplier_id,
                 'event_title': tracking_item.get('event_title', ''),
                 'event_description': tracking_item.get('event_description', ''),
                 'event_date': event_date,
@@ -741,10 +765,10 @@ class DatabaseManager:
             # Insert into database
             insert_query = """
             INSERT INTO supplier_tracking (
-                material_id, location_id, supplier_name, event_title, event_description,
+                material_id, location_id, supplier_id, event_title, event_description,
                 event_date, key_takeaway, source, source_link, published_date, upload_user_id
             ) VALUES (
-                %(material_id)s, %(location_id)s, %(supplier_name)s, %(event_title)s, %(event_description)s,
+                %(material_id)s, %(location_id)s, %(supplier_id)s, %(event_title)s, %(event_description)s,
                 %(event_date)s, %(key_takeaway)s, %(source)s, %(source_link)s, %(published_date)s, %(upload_user_id)s
             ) RETURNING id, event_date;
             """
