@@ -199,7 +199,7 @@ def news_agent(extracted_text, material, report_url):
     - Extract the **main region** relevant to the news ("region"). 
       If multiple regions are mentioned, return only the primary region (e.g., 'Asia-Pacific' from 'China, India, Asia-Pacific').
     - Always include "material": '{material}'
-    - Include "news_url"; if not available, use fallback {report_url}
+    - Include "news_url" if available in the text; otherwise omit it (it will be set automatically)
 
     Only return actual news events, ignore headings or summaries.
 

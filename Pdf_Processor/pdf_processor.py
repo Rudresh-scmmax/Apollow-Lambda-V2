@@ -197,7 +197,7 @@ def lambda_handler(event, context):
                 news_tag = classify_news_tags(news_item)
                 print(f"[INFO] Classified news tag: {news_tag} for item: {news_item.get('title', 'Unknown')}")
                 
-                if db.insert_news_item(news_item, material_id, user_id, news_tag):
+                if db.insert_news_item(news_item, material_id, user_id, news_tag, report_link):
                     inserted_count += 1
                     print(f"[SUCCESS] Inserted news item: {news_item.get('title')}")
                 else:
@@ -308,7 +308,7 @@ if __name__ == "__main__":
         "Records": [{
             "s3": {
                 "bucket": {"name": "private-bucket-fastapi"},
-                "object": {"key": "pdfs/36d691af-70b8-403b-85fe-d30d5e57694f.pdf"}
+                "object": {"key": "pdfs/2fcdac45-a050-4828-b42c-5f1e7af9d8e0.pdf"}
             }
         }]
     }, None)

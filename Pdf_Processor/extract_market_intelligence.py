@@ -68,7 +68,8 @@ class DatabaseManager:
             if published_date and isinstance(published_date, date):
                 published_date = published_date.isoformat()
 
-            source_link = outlook_item.get("source_link")
+            # Always use the PDF link (report_url) as the source_link
+            source_link = report_url if report_url else None
             if source_link and not isinstance(source_link, str):
                 source_link = None
 
@@ -84,7 +85,7 @@ class DatabaseManager:
                 [
                     datetime.now(timezone.utc).date().isoformat(),
                     'Report',
-                    report_url,
+                    source_link,
                     published_date,
                     material_id,
                     user_id,
@@ -115,12 +116,10 @@ class DatabaseManager:
             if published_date and isinstance(published_date, date):
                 published_date = published_date.isoformat()
             
-
-            # Ensure source_link is handled correctly
-            source_link = outlook_item.get("source_link")
+            # Always use the PDF link (report_url) as the source_link
+            source_link = report_url if report_url else None
             if source_link and not isinstance(source_link, str):
-                source_link = None # Ensure it's a string or None
-
+                source_link = None
 
             database_query(
                 """
@@ -134,7 +133,7 @@ class DatabaseManager:
                 [
                     datetime.now(timezone.utc).date().isoformat(),
                     'Report',
-                    report_url,
+                    source_link,
                     published_date,
                     material_id,
                     user_id,
@@ -149,7 +148,7 @@ class DatabaseManager:
             return False
         
     
-    def insert_news_item(self, news_item, material_id, user_id, news_tag=""):
+    def insert_news_item(self, news_item, material_id, user_id, news_tag="", report_link=None):
         """Inserts a single news item into the news_insights table."""
         try:
             location_id = self.get_location_id(news_item["region"])
@@ -165,8 +164,8 @@ class DatabaseManager:
             if published_date and isinstance(published_date, date):
                 published_date = published_date.isoformat()
 
-            # Source link fallback
-            source_link = news_item.get("news_url")
+            # Always use the PDF link (report_link) as the source_link
+            source_link = report_link if report_link else None
             if source_link and not isinstance(source_link, str):
                 source_link = None
 
@@ -408,6 +407,8 @@ class DatabaseManager:
                     # Set period dates (assuming single day period)
                     period_start_date = price_date_obj
                     period_end_date = price_date_obj
+                    period_start_date_str = period_start_date.isoformat()
+                    period_end_date_str = period_end_date.isoformat()
                     
                     # Round price to 2 decimal places
                     rounded_price = round(float(price_value), 2)
@@ -423,7 +424,7 @@ class DatabaseManager:
                         LIMIT 1;
                     """
                     
-                    result = database_query(check_query, [material_id, location_id, price_date_obj, price_type])
+                    result = database_query(check_query, [material_id, location_id, period_start_date_str, price_type])
                     
                     if isinstance(result, dict) and result.get('statusCode') == 500:
                         errors.append(f"Database error checking existing record: {result.get('error')}")
@@ -478,11 +479,11 @@ class DatabaseManager:
                                 rounded_price,
                                 'USD',  # Default currency
                                 'market_research_report',
-                                price_date_obj,
-                                period_end_date,
+                                period_start_date_str,
+                                period_end_date_str,
                                 material_id,
                                 location_id,
-                                existing_date,
+                                existing_date.isoformat() if isinstance(existing_date, date) else existing_date,
                                 price_type
                             ])
                             
@@ -505,8 +506,8 @@ class DatabaseManager:
                         insert_result = database_query(insert_query, [
                             price_id,
                             material_id,
-                            period_start_date,
-                            period_end_date,
+                            period_start_date_str,
+                            period_end_date_str,
                             region,
                             rounded_price,
                             'USD',  # Default currency
@@ -623,8 +624,8 @@ class DatabaseManager:
             if published_date and isinstance(published_date, date):
                 published_date = published_date.isoformat()
             
-            # Ensure source_link is handled correctly
-            source_link = shutdown_item.get("source_link") or report_url
+            # Always use the PDF link (report_url) as the source_link
+            source_link = report_url if report_url else None
             if source_link and not isinstance(source_link, str):
                 source_link = None
 
@@ -747,6 +748,11 @@ class DatabaseManager:
                 print(f"[WARNING] Skipping supplier tracking event. Supplier '{supplier_name}' not found.")
                 return False
             
+            # Always use the PDF link (report_url) as the source_link
+            source_link = report_url if report_url else None
+            if source_link and not isinstance(source_link, str):
+                source_link = None
+            
             # Prepare data for insertion
             tracking_data = {
                 'material_id': material_id,
@@ -757,7 +763,7 @@ class DatabaseManager:
                 'event_date': event_date,
                 'key_takeaway': tracking_item.get('key_takeaway', ''),
                 'source': tracking_item.get('source', 'Market Research Report'),
-                'source_link': tracking_item.get('source_link', report_url),
+                'source_link': source_link,
                 'published_date': published_date,
                 'upload_user_id': user_id
             }
@@ -918,7 +924,7 @@ def capture_market_intelligence(plain_text, report_url, user_id, material, mater
             news_tag = classify_news_tags(news_item)
             print(f"[INFO] Classified news tag: {news_tag} for item: {news_item.get('title', 'Unknown')}")
             
-            if db.insert_news_item(news_item, material_id, user_id, news_tag):
+            if db.insert_news_item(news_item, material_id, user_id, news_tag, report_url):
                 print(f"[SUCCESS] Inserted news item: {news_item}")
             else:
                 print(f"[WARNING] Failed to insert news item: {news_item}")
