@@ -106,18 +106,30 @@ class DatabaseManager:
         )
         return choices[best[0]] if best else None
 
-    def _get_currency_id(self, currency_code: Optional[str]) -> Optional[int]:
-        """Get currency_id from currency code (e.g., 'USD', 'EUR')."""
-        if not currency_code:
+    def _get_currency_id(self, currency_name: Optional[str], score_cutoff: int = 80) -> Optional[int]:
+        """Return the best-matching currency_id using RapidFuzz.
+        Case-insensitive matching: handles mixed case in database (e.g., 'US Dollar' matches 'us dollar').
+        Also handles currency codes like 'USD' matching 'US Dollar'."""
+        if not currency_name:
             return None
 
-        query = "SELECT currency_id, currency_code FROM currency_master WHERE currency_code = %s"
-        result = database_query(query, [currency_code.upper()])
+        query = "SELECT currency_id, currency_name FROM currency_master"
+        result = database_query(query)
         rows = self._parse_db_result(result)
         
-        if rows and len(rows) > 0:
-            return rows[0].get("currency_id")
-        return None
+        if not rows:
+            return None
+
+        choices = {r["currency_name"]: r["currency_id"] for r in rows}
+
+        best = process.extractOne(
+            currency_name,
+            choices.keys(),
+            scorer=fuzz.WRatio,
+            processor=str.lower,
+            score_cutoff=score_cutoff,
+        )
+        return choices[best[0]] if best else None
 
     def _get_country_id(self, country_name: Optional[str], score_cutoff: int = 80) -> Optional[int]:
         """Return the best-matching country_id using RapidFuzz.
@@ -254,7 +266,7 @@ class DatabaseManager:
                         m.material_description as material_code,
                         s.supplier_name as vendor_name,
                         qc.price_per_unit,
-                        c.currency_code as currency,
+                        c.currency_name as currency,
                         co.country_name as country_of_origin,
                         qc.quote_date
                     FROM quote_comparison qc
@@ -271,7 +283,7 @@ class DatabaseManager:
                         m.material_description as material_code,
                         s.supplier_name as vendor_name,
                         qc.price_per_unit,
-                        c.currency_code as currency,
+                        c.currency_name as currency,
                         co.country_name as country_of_origin,
                         qc.quote_date
                     FROM quote_comparison qc
@@ -815,15 +827,15 @@ def lambda_handler(event=None, context=None):
 if __name__ == "__main__":
     result = lambda_handler({
         "body": json.dumps({
-            "batch_id": "17b19ab5-bd36-4b9e-bf89-6ad6cddbc3d3",
+            "batch_id": "afc7c9bb-4898-4b6e-8bff-ffe3503daff2",
     "files": [
         {
-            "id": 11,
-            "pdfKey": "quoteCompare/43efc76b-dcce-49c8-8306-89522ab19a64.pdf"
+            "id": 23,
+            "pdfKey": "quoteCompare/ddfe0dac-1588-4f30-be49-8111f3907595.pdf"
         },
         {
-            "id": 12,
-            "pdfKey": "quoteCompare/18f862fe-29df-45c0-a7cd-a524d0c57c76.pdf"
+            "id": 24,
+            "pdfKey": "quoteCompare/1780363e-50b3-4b58-9a29-7d94565840e2.pdf"
         }
     ]
         })
