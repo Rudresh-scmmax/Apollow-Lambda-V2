@@ -738,7 +738,7 @@ def lambda_handler(event=None, context=None):
             }
         
         s3 = boto3.client('s3')
-        bucket_name = 'private-bucket-fastapi'
+        bucket_name = os.environ.get('PRIVATE_FILES_BUCKET', 'private-bucket-fastapi')
         processed_data = []
         
         for row in rows:

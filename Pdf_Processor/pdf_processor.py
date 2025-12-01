@@ -11,7 +11,7 @@ from llm_module import generate_takeaways, query_bedrock_with_image, news_agent,
 from PIL import Image
 import fitz  # PyMuPDF
 
-S3_BUCKET = "private-bucket-fastapi"
+S3_BUCKET = os.environ.get("PRIVATE_FILES_BUCKET", "private-bucket-fastapi")
 s3 = boto3.client("s3")
 
 def download_pdf_from_s3(key):
@@ -307,7 +307,7 @@ if __name__ == "__main__":
     lambda_handler({
         "Records": [{
             "s3": {
-                "bucket": {"name": "private-bucket-fastapi"},
+                "bucket": {"name": S3_BUCKET},
                 "object": {"key": "pdfs/2fcdac45-a050-4828-b42c-5f1e7af9d8e0.pdf"}
             }
         }]

@@ -12,6 +12,9 @@ import io
 from typing import Dict, Optional, Any
 from db_query import database_query
 
+# S3 bucket fallback for local testing
+PRIVATE_BUCKET = os.environ.get("PRIVATE_FILES_BUCKET", "private-bucket-fastapi")
+
 # Tesseract OCR path (for Lambda environment)
 pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
@@ -415,7 +418,7 @@ def lambda_handler(event, context=None):
 
 if __name__ == "__main__":
     event = {
-        "bucket": "private-bucket-fastapi",
+        "bucket": PRIVATE_BUCKET,
         "key": "factPack/ce1f6bb8-6388-4926-aec8-2cc3519a1591.pdf",
         "rowid": 1
     }
