@@ -95,7 +95,23 @@ def fetch_material_price_history(material_ids: List[str] = None):
             return pd.DataFrame()
         
         # Convert to DataFrame
-        df = pd.DataFrame(rows)
+        # Handle both named columns (if fixed in future) and generic column_N names
+        # Query: material_id, material_description, period_start_date, period_end_date, price, price_currency, country, price_type
+        data = []
+        for row in rows:
+            item = {
+                'material_id': row.get('material_id') or row.get('column_0'),
+                'material_description': row.get('material_description') or row.get('column_1'),
+                'period_start_date': row.get('period_start_date') or row.get('column_2'),
+                'period_end_date': row.get('period_end_date') or row.get('column_3'),
+                'price': row.get('price') or row.get('column_4'),
+                'price_currency': row.get('price_currency') or row.get('column_5'),
+                'country': row.get('country') or row.get('column_6'),
+                'price_type': row.get('price_type') or row.get('column_7')
+            }
+            data.append(item)
+            
+        df = pd.DataFrame(data)
         print(f"[DEBUG] Created DataFrame with {len(df)} rows and {len(df.columns)} columns")
         return df
     except Exception as e:
@@ -112,7 +128,8 @@ def get_material_name(material_id: str) -> Optional[str]:
         result = database_query(query, [material_id])
         rows = _parse_db_result(result)
         if rows and len(rows) > 0:
-            return rows[0].get("material_description")
+            row = rows[0]
+            return row.get("material_description") or row.get("column_0")
         return None
     except Exception as e:
         print(f"Error fetching material name: {e}")

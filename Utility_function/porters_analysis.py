@@ -48,13 +48,16 @@ def get_material_data(material_id: str) -> List[Dict]:
     
     data = []
     for row in body:
-        data.append({
-            'material_id': row.get('material_id'),
-            'published_date': row.get('published_date', ''),
-            'title': row.get('title', ''),
-            'source': row.get('source', ''),
-            'news_tag': row.get('news_tag', '')
-        })
+        # Handle both named columns (if fixed in future) and generic column_N names
+        # Query: SELECT material_id, published_date::text, title, source, news_tag
+        item = {
+            'material_id': row.get('material_id') or row.get('column_0'),
+            'published_date': row.get('published_date') or row.get('column_1', ''),
+            'title': row.get('title') or row.get('column_2', ''),
+            'source': row.get('source') or row.get('column_3', ''),
+            'news_tag': row.get('news_tag') or row.get('column_4', '')
+        }
+        data.append(item)
     return data
 
 def get_takeaways(material_id: str) -> List[Dict]:
@@ -95,13 +98,16 @@ def get_takeaways(material_id: str) -> List[Dict]:
     
     data = []
     for row in body:
-        data.append({
-            'publication': row.get('publication', ''),
-            'report_link': row.get('report_link', ''),
-            'published_date': row.get('published_date', ''),
-            'material_id': row.get('material_id', ''),
-            'takeaway': row.get('takeaway', '')
-        })
+        # Handle both named columns and generic column_N names
+        # Query: SELECT publication, report_link, published_date::text, material_id, takeaway
+        item = {
+            'publication': row.get('publication') or row.get('column_0', ''),
+            'report_link': row.get('report_link') or row.get('column_1', ''),
+            'published_date': row.get('published_date') or row.get('column_2', ''),
+            'material_id': row.get('material_id') or row.get('column_3', ''),
+            'takeaway': row.get('takeaway') or row.get('column_4', '')
+        }
+        data.append(item)
     return data
 
 def get_material_name(material_id: str) -> Optional[str]:
@@ -141,7 +147,9 @@ def get_material_name(material_id: str) -> Optional[str]:
         return None
     
     if body and len(body) > 0:
-        return body[0].get('material_description')
+        row = body[0]
+        # Query: SELECT material_description
+        return row.get('material_description') or row.get('column_0')
     return None
 
 def invoke_bedrock_text(system_msg, user_content, temperature=0.1, max_tokens=4096):
